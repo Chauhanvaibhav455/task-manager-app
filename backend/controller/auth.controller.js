@@ -3,58 +3,51 @@ import bcryptjs from "bcryptjs"
 import { errorHandler } from "../utils/error.js"
 import jwt from "jsonwebtoken"
 
+// ================= SIGNUP =================
 export const signup = async (req, res, next) => {
   const { name, email, password, profileImageUrl, adminJoinCode } = req.body
 
-  if (
-    !name ||
-    !email ||
-    !password ||
-    name === "" ||
-    email === "" ||
-    password === ""
-  ) {
+  if (!name || !email || !password) {
     return next(errorHandler(400, "All fields are required"))
   }
 
-  //   Check if user already exists
-  const isAlreadyExist = await User.findOne({ email })
-
-  if (isAlreadyExist) {
-    return next(errorHandler(400, "User already exists"))
-  }
-
-  //   check user role
-  let role = "user"
-
-  if (adminJoinCode && adminJoinCode === process.env.ADMIN_JOIN_CODE) {
-    role = "admin"
-  }
-
-  const hashedPassword = bcryptjs.hashSync(password, 10)
-
-  const newUser = new User({
-    name,
-    email,
-    password: hashedPassword,
-    profileImageUrl,
-    role,
-  })
-
   try {
+    const isAlreadyExist = await User.findOne({ email })
+
+    if (isAlreadyExist) {
+      return next(errorHandler(400, "User already exists"))
+    }
+
+    let role = "user"
+
+    if (adminJoinCode && adminJoinCode === process.env.ADMIN_JOIN_CODE) {
+      role = "admin"
+    }
+
+    const hashedPassword = bcryptjs.hashSync(password, 10)
+
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      profileImageUrl,
+      role,
+    })
+
     await newUser.save()
 
-    res.json("Signup successful")
+    res.status(200).json("Signup successful")
   } catch (error) {
-    next(error.message)
+    next(error)
   }
 }
 
+// ================= SIGNIN =================
 export const signin = async (req, res, next) => {
   try {
     const { email, password } = req.body
 
-    if (!email || !password || email === "" || password === "") {
+    if (!email || !password) {
       return next(errorHandler(400, "All fields are required"))
     }
 
@@ -64,7 +57,6 @@ export const signin = async (req, res, next) => {
       return next(errorHandler(404, "User not found!"))
     }
 
-    // compare password
     const validPassword = bcryptjs.compareSync(password, validUser.password)
 
     if (!validPassword) {
@@ -78,12 +70,22 @@ export const signin = async (req, res, next) => {
 
     const { password: pass, ...rest } = validUser._doc
 
-    res.status(200).cookie("access_token", token, { httpOnly: true }).json(rest)
+    // ✅ FIXED COOKIE SETTINGS FOR PRODUCTION
+    res
+      .status(200)
+      .cookie("access_token", token, {
+        httpOnly: true,
+        secure: true,        // 🔥 required for HTTPS (Render/Vercel)
+        sameSite: "None",    // 🔥 required for cross-origin
+      })
+      .json(rest)
+
   } catch (error) {
     next(error)
   }
 }
 
+// ================= USER PROFILE =================
 export const userProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id)
@@ -100,6 +102,7 @@ export const userProfile = async (req, res, next) => {
   }
 }
 
+// ================= UPDATE USER =================
 export const updateUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id)
@@ -117,7 +120,7 @@ export const updateUserProfile = async (req, res, next) => {
 
     const updatedUser = await user.save()
 
-    const { password: pass, ...rest } = user._doc
+    const { password: pass, ...rest } = updatedUser._doc
 
     res.status(200).json(rest)
   } catch (error) {
@@ -125,15 +128,14 @@ export const updateUserProfile = async (req, res, next) => {
   }
 }
 
+// ================= UPLOAD IMAGE =================
 export const uploadImage = async (req, res, next) => {
   try {
     if (!req.file) {
       return next(errorHandler(400, "No file uploaded"))
     }
 
-    const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${
-      req.file.filename
-    }`
+    const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`
 
     res.status(200).json({ imageUrl })
   } catch (error) {
@@ -141,12 +143,17 @@ export const uploadImage = async (req, res, next) => {
   }
 }
 
+// ================= SIGNOUT =================
 export const signout = async (req, res, next) => {
   try {
     res
-      .clearCookie("access_token")
+      .clearCookie("access_token", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      })
       .status(200)
-      .json("User has been loggedout successfully!")
+      .json("User has been logged out successfully!")
   } catch (error) {
     next(error)
   }
