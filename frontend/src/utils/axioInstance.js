@@ -1,6 +1,6 @@
 import axios from "axios"
 
-const BASE_URL = "http://localhost:5000/api" 
+const BASE_URL = "https://task-manager-app-production-86de.up.railway.app/api"
 
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
